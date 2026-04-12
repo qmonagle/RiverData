@@ -1,0 +1,46 @@
+{
+    "author": "Quentin Monagle",
+    "dependencies": {
+        "pebble-clay": "^1.0.4"
+    },
+    "keywords": [
+        "pebble-app"
+    ],
+    "name": "riverdata",
+    "pebble": {
+        "capabilities": [
+            "configurable"
+        ],
+        "displayName": "RiverData",
+        "enableMultiJS": true,
+        "messageKeys": [
+            "CHART_DATA",
+            "REQUEST_WEATHER",
+            "MONITORING_LOCATION"
+        ],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "images/RiverIcon",
+                    "menuIcon": true,
+                    "name": "RIVER_ICON",
+                    "targetPlatforms": null,
+                    "type": "png"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite",
+            "emery"
+        ],
+        "uuid": "4f39d702-5fcd-4794-a344-9e6bc31e4a4c",
+        "watchapp": {
+            "watchface": false
+        }
+    },
+    "version": "0.1.0"
+}
