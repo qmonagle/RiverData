@@ -15,17 +15,26 @@ static void  axis_label(){
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx){
- 
+  GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
+  GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
   
   graphics_context_set_stroke_width(ctx, 2);
   graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_fill_color(ctx, CanvasBackgroundColor);
+  graphics_context_set_stroke_color(ctx, CanvasStrokeColor);
   graphics_context_set_antialiased(ctx, 1);
+  
+
   
   GRect layer_bounds = layer_get_bounds(layer);
   int width = layer_bounds.size.w;
   int height = layer_bounds.size.h;
   int depth_min = 255;
   int depth_max = 50;
+  
+  //Draw graph border. Fill with color if available
+  PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 0, GCornerNone), graphics_draw_rect(ctx, GRect(0, 0, width, height)));
+  //graphics_fill_rect(ctx, GRect(0, 0, width, height), 0, GCornerNone);
   
   for (int i = 0; i < s_num_points; i++){
     if (s_depth_data[i] < depth_min){
@@ -89,17 +98,16 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
       uint32_t tic_label = tic_value / 10;
       uint32_t tic_label_rem = tic_value % 10;
     
+    
+    
+      int label_offset = 6;
       snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
-      graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(tic_length + 3, ((y_scale * i) - 8), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(tic_length + 3, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
   //X-Axis
   for (int i = 1; i <= num_tics_x; i++){
     graphics_draw_line(ctx, GPoint(((x_scale * i)), (height)), GPoint(((x_scale * i)), (height - tic_length)));
   }
-  
-  
-  //Draw graph border
-  graphics_draw_rect(ctx,GRect(0, 0, width, height));
 }
   
 
@@ -126,9 +134,8 @@ if (depth_tuple) {
   //Update canvas
   if(s_canvas_layer) {
       layer_mark_dirty(s_canvas_layer);
-      printf("canvas updated. Latest height: %i", s_depth_data[s_num_points]);
+      //printf("canvas updated. Latest height: %i", s_depth_data[s_num_points]);
     }
-  
 }
 
 
@@ -150,6 +157,7 @@ static void main_window_load(Window *window) {
   
   int width = window_bounds.size.w;
   int height = window_bounds.size.h;
+  
   
   
   // Create the canvas layer and axis label layer
@@ -177,8 +185,9 @@ static void main_window_unload(Window *window) {
 }
 
 static void init() {
+  GColor  WindowColor = PBL_IF_COLOR_ELSE(GColorGreen, GColorWhite);
   s_main_window = window_create();
-  window_set_background_color(s_main_window, GColorWhite);
+  window_set_background_color(s_main_window, WindowColor);
   window_set_window_handlers(s_main_window, (WindowHandlers) {
     .load = main_window_load,
     .unload = main_window_unload
