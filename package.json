@@ -1,7 +1,7 @@
 {
     "author": "Quentin Monagle",
     "dependencies": {
-        "pebble-clay": "^1.0.4"
+        "@rebble/clay": "^1.0.8"
     },
     "keywords": [
         "pebble-app"
@@ -35,12 +35,13 @@
             "aplite",
             "basalt",
             "diorite",
-            "emery"
+            "emery",
+            "flint"
         ],
         "uuid": "4f39d702-5fcd-4794-a344-9e6bc31e4a4c",
         "watchapp": {
             "watchface": false
         }
     },
-    "version": "0.1.0"
+    "version": "0.2.0"
 }
