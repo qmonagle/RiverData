@@ -15,5 +15,11 @@ module.exports =
     "limit": 10,
     "type": "number"
   }
-  }  
+  }, 
+  {
+  "type": "toggle",
+  "messageKey": "UNITS",
+  "label": "Unit",
+  "defaultValue": true
+}
 ];

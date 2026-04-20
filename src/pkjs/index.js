@@ -7,9 +7,8 @@ var clayConfig = require('./config');
 // Initialize Clay
 var clay = new Clay(clayConfig);
 
-//Grab monitoring location from local storage
 
-var settings = JSON.parse(localStorage.getItem('clay-settings'));
+
 
  
 
@@ -22,9 +21,15 @@ function fetchWaterData() {
   if (settings) {
   var MonitoringLocation = settings['MONITORING_LOCATION']; // Access by messageKey defined in config.json
   console.log('Stored Monitoring Location is: ' + MonitoringLocation);
+  //pull user selected units
+  // true = imperial, false = metric
+  var units = settings['UNITS'];
   } else{
   var MonitoringLocation = '05454500'
+  var units = true;
   }
+  
+  
   
   
   // USGS Water Services REST API URL for Gage Height (00065)
@@ -44,21 +49,33 @@ function fetchWaterData() {
       var targetPoints = 96;
       var skipFactor = Math.ceil(allValues.length / targetPoints); // Usually 7 for a week
       var dataBuffer = [];
+      var dataBuffer16 = [];
       
       //Convert values for more efficient sending
       for (var i = 0; i < allValues.length; i+= skipFactor) {
         
         // Convert "4.52" -> 452
-          var scaledValue = parseFloat(allValues[i].value) * 10;
+          scaledValue = parseFloat(allValues[i].value) * 100;
           
+         
           // Ensure we don't send negative numbers or weird floats
-          dataBuffer.push(Math.max(0, Math.floor(scaledValue))); 
+          dataBuffer.push(Math.max(0, Math.floor(scaledValue)));    
       }
       
+      //convert 16 bit values into two 8 bit values
+      var j = 0;
+      for (var i = 0; i< (dataBuffer.length * 2); i+= 2){
+        dataBuffer16[i] = dataBuffer[j] >> 8;
+        dataBuffer16[i+1] = dataBuffer[j] & 0xff;
+        j++;
+      }
+      
+      console.log('RetrievedDepthData: ' + dataBuffer16);
       //console.log('First point: ' + dataBuffer[0]);
       
       Pebble.sendAppMessage({
-          'CHART_DATA': dataBuffer 
+          'CHART_DATA': dataBuffer16, 
+          'UNITS' : units
       }, function(e) {
           console.log('Successfully sent water data!');
       }, function(e) {
