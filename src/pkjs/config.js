@@ -17,9 +17,23 @@ module.exports =
   }
   }, 
   {
-  "type": "toggle",
+  "type": "select",
   "messageKey": "UNITS",
-  "label": "Unit",
-  "defaultValue": true
+  "defaultValue": "ft",
+  "label": "Depth Units",
+  "options": [
+    { 
+      "label": "Meters", 
+      "value": "m" 
+    },
+    { 
+      "label": "Feet",
+      "value": "ft" 
+    }
+  ]
+},
+  {
+  "type": "submit",
+  "defaultValue": "Save"
 }
 ];

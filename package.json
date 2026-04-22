@@ -1,8 +1,7 @@
 {
     "author": "Quentin Monagle",
     "dependencies": {
-        "@rebble/clay": "^1.0.8",
-        "pebble-graph": "^1.0.1"
+        "@rebble/clay": "^1.0.8"
     },
     "keywords": [
         "pebble-app"
@@ -16,7 +15,6 @@
         "enableMultiJS": true,
         "messageKeys": [
             "CHART_DATA",
-            "REQUEST_WEATHER",
             "MONITORING_LOCATION",
             "UNITS"
         ],

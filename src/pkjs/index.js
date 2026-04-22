@@ -1,4 +1,3 @@
-
 // Initialize Clay
 // Import the Clay package
 var Clay = require('@rebble/clay');
@@ -7,10 +6,9 @@ var clayConfig = require('./config');
 // Initialize Clay
 var clay = new Clay(clayConfig);
 
-
-
-
- 
+var MonitoringLocation = '05454500'
+var units = 'ft';
+var unitsEnum = 0;
 
 
 
@@ -18,16 +16,27 @@ function fetchWaterData() {
   //Pull monitoring location from local storage or default if it hasn't been initialized.
   var settings = JSON.parse(localStorage.getItem('clay-settings'));
   
+  
   if (settings) {
-  var MonitoringLocation = settings['MONITORING_LOCATION']; // Access by messageKey defined in config.json
+  MonitoringLocation = settings['MONITORING_LOCATION']; // Access by messageKey defined in config.json
   console.log('Stored Monitoring Location is: ' + MonitoringLocation);
   //pull user selected units
-  // true = imperial, false = metric
-  var units = settings['UNITS'];
+  units = settings['UNITS'];
+  //console.log('Stored units are: ' + units);
   } else{
-  var MonitoringLocation = '05454500'
-  var units = true;
+    MonitoringLocation = '05454500'
+    units = 'ft';
+    unitsEnum = 0;
   }
+  
+  if (units == 'ft'){
+    unitsEnum = 0;
+  } else if (units == 'm'){
+    unitsEnum = 1;
+  } else{
+    unitsEnum = 0;
+  }
+  console.log('Stored units are: ' + unitsEnum);
   
   
   
@@ -42,8 +51,7 @@ function fetchWaterData() {
     try {
       // Parse the JSON response
       var json = JSON.parse(this.responseText);
-      var allValues = json.value.timeSeries[0].values[0].value;
-      
+      var allValues = json.value.timeSeries[0].values[0].value; 
       var numPoints = Math.min(allValues.length, 96);
       
       var targetPoints = 96;
@@ -55,27 +63,37 @@ function fetchWaterData() {
       for (var i = 0; i < allValues.length; i+= skipFactor) {
         
         // Convert "4.52" -> 452
-          scaledValue = parseFloat(allValues[i].value) * 100;
+          var scaledValue = parseFloat(allValues[i].value) * 100;
           
          
           // Ensure we don't send negative numbers or weird floats
           dataBuffer.push(Math.max(0, Math.floor(scaledValue)));    
       }
+      var dataBuffertemp = [];
+      //convert data from 100 x feet to 100 x meters
+      if (units == 'm'){
+        for (var i = 0; i <dataBuffer.length; i++){
+          //round data, need to send an int
+          dataBuffer[i] = Math.round(dataBuffer[i] / 3.281);
+          console.log('converted value: ' + dataBuffer[i]);
+        }
+      }
+      
       
       //convert 16 bit values into two 8 bit values
       var j = 0;
-      for (var i = 0; i< (dataBuffer.length * 2); i+= 2){
+      for (var i = 0; i < (dataBuffer.length * 2); i+= 2){
         dataBuffer16[i] = dataBuffer[j] >> 8;
         dataBuffer16[i+1] = dataBuffer[j] & 0xff;
         j++;
       }
       
-      console.log('RetrievedDepthData: ' + dataBuffer16);
+      //console.log('RetrievedDepthData: ' + dataBuffer16);
       //console.log('First point: ' + dataBuffer[0]);
       
       Pebble.sendAppMessage({
           'CHART_DATA': dataBuffer16, 
-          'UNITS' : units
+          'UNITS' : unitsEnum
       }, function(e) {
           console.log('Successfully sent water data!');
       }, function(e) {
@@ -112,34 +130,16 @@ function fetchWaterData() {
 
 
 
-// Listen for when the watch requests an update
-Pebble.addEventListener('appmessage', function(e) {
-  console.log('AppMessage received!');
-  fetchWaterData();
-}
-);
-
-
 // Listen for when the watchface is opened
 Pebble.addEventListener('ready',
   function(e) {
     console.log('PebbleKit JS ready!');
 
-    // Get the initial weather
+    // Get the initial data
     fetchWaterData();
   }
 );
 
-// Listen for when an AppMessage is received
-Pebble.addEventListener('appmessage',
-  function(e) {
-    console.log('AppMessage received!');
-    // Check if this is a weather refresh request
-    if (e.payload['REQUEST_WEATHER']) {
-      fetchWaterData();
-    }
-  }
-);
 
 //Listen for when the setting webview is closed
 Pebble.addEventListener('webviewclosed',
