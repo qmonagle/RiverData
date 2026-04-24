@@ -9,7 +9,8 @@ var clay = new Clay(clayConfig);
 var MonitoringLocation = '05454500'
 var units = 'ft';
 var unitsEnum = 0;
-
+var timeSpan = 'P7D';
+var timeSpanInt = 7;
 
 
 function fetchWaterData() {
@@ -22,11 +23,13 @@ function fetchWaterData() {
   console.log('Stored Monitoring Location is: ' + MonitoringLocation);
   //pull user selected units
   units = settings['UNITS'];
+  timeSpan = settings['TIME_SPAN'];
   //console.log('Stored units are: ' + units);
   } else{
     MonitoringLocation = '05454500'
     units = 'ft';
     unitsEnum = 0;
+    timeSpan = 'P7D';
   }
   
   if (units == 'ft'){
@@ -43,8 +46,9 @@ function fetchWaterData() {
   
   // USGS Water Services REST API URL for Gage Height (00065)
   var siteId = MonitoringLocation;
+  var API_timeSpan = timeSpan;
   var url = 'https://waterservices.usgs.gov/nwis/iv/?format=json&sites=' + 
-            siteId + '&parameterCd=00065&period=P7D';
+            siteId + '&parameterCd=00065&period=' + API_timeSpan;
 
   var xhr = new XMLHttpRequest();
   xhr.onload = function () {
@@ -88,12 +92,29 @@ function fetchWaterData() {
         j++;
       }
       
-      //console.log('RetrievedDepthData: ' + dataBuffer16);
-      //console.log('First point: ' + dataBuffer[0]);
+     
+      //Convert time span into enumeration that can be sent to watch
+      //1 day = 1; 3 days = 3; 1 week = 7; 1 year = 52
+      if (timeSpan === 'P1D'){
+        timeSpanInt = 1;
+      } else if(timeSpan === 'P3D'){
+        timeSpanInt = 3;
+      } else if(timeSpan === 'P7D'){
+        timeSpanInt = 7;
+      } else if (timeSpan ==='P30D'){
+        timeSpanInt = 30;
+      } else if (timeSpan ==='P365D'){
+        timeSpanInt = 36;
+      } else{
+        timeSpanInt = 7;
+      }
+      console.log('Time span JS: ' + timeSpan);
+      console.log('Time span Int JS: ' + timeSpanInt);
       
       Pebble.sendAppMessage({
           'CHART_DATA': dataBuffer16, 
-          'UNITS' : unitsEnum
+          'UNITS' : unitsEnum,
+          'TIME_SPAN' : timeSpanInt
       }, function(e) {
           console.log('Successfully sent water data!');
       }, function(e) {

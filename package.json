@@ -16,7 +16,8 @@
         "messageKeys": [
             "CHART_DATA",
             "MONITORING_LOCATION",
-            "UNITS"
+            "UNITS",
+            "TIME_SPAN"
         ],
         "projectType": "native",
         "resources": {
@@ -43,5 +44,5 @@
             "watchface": false
         }
     },
-    "version": "0.3.0"
+    "version": "0.5.0"
 }

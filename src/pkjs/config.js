@@ -32,6 +32,34 @@ module.exports =
     }
   ]
 },
+    {
+  "type": "select",
+  "messageKey": "TIME_SPAN",
+  "defaultValue": "P7D",
+  "label": "Graph Time Span",
+  "options": [
+    { 
+      "label": "1 Day", 
+      "value": "P1D" 
+    },
+    { 
+      "label": "3 Days",
+      "value": "P3D" 
+    },
+    {
+      "label": "1 Week",
+      "value": "P7D"
+    },
+    {
+     "label": "30 Days",
+      "value": "P30D" 
+    },
+    {
+      "label": "1 Year",
+      "value": "P365D"
+    }
+  ]
+},
   {
   "type": "submit",
   "defaultValue": "Save"

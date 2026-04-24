@@ -15,6 +15,7 @@ static uint16_t s_depth_data16[96];
 static int16_t s_num_points = 0;
 static char label_unit[10] = "";
 static char graph_title[15] = "Depth";
+static char x_axis_label[15] = "One Week";
 
 
 
@@ -22,7 +23,7 @@ int depth_min = 2550;
 int depth_max = 50;
 
 static void  axis_label(){
-  text_layer_set_text(x_axis_label_layer, "One Week");
+  text_layer_set_text(x_axis_label_layer, x_axis_label);
   snprintf(graph_title, sizeof(graph_title), "Depth %s", label_unit);
   text_layer_set_text(graph_title_layer, graph_title);
 }
@@ -174,19 +175,38 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   // Read tuples for weather data
    Tuple *depth_tuple = dict_find(iterator, MESSAGE_KEY_CHART_DATA);
    Tuple *depth_tuple_unit = dict_find(iterator, MESSAGE_KEY_UNITS);
+   Tuple *depth_tuple_timeSpan = dict_find(iterator, MESSAGE_KEY_TIME_SPAN);
   
-  
-if (depth_tuple_unit){
-  uint8_t depth_unit = depth_tuple_unit->value->uint8;
-  uint8_t unit = depth_unit;
-  if (unit == 0){
-    strcpy(label_unit, "(ft)");
-  }else if (unit == 1){
-    strcpy(label_unit, "(m)");
-  }else{
-    strcpy(label_unit, "(ft)");
+ // Determine unit label based on message key value 
+  if (depth_tuple_unit){
+    uint8_t depth_unit = depth_tuple_unit->value->uint8;
+    uint8_t unit = depth_unit;
+    if (unit == 0){
+      strcpy(label_unit, "(ft)");
+    }else if (unit == 1){
+      strcpy(label_unit, "(m)");
+    }else{
+      strcpy(label_unit, "(ft)");
+    }
+    
+//Determine x-axis label based on message key value
+  if (depth_tuple_timeSpan){
+    uint8_t depth_timeSpan = depth_tuple_timeSpan->value->uint8;
+    
+    if (depth_timeSpan == 1){
+      strcpy(x_axis_label, "One Day");
+    } else if (depth_timeSpan == 3){
+      strcpy(x_axis_label, "Three Days");
+    } else if (depth_timeSpan == 7){
+      strcpy(x_axis_label, "One Week");
+    } else if (depth_timeSpan == 30){
+      strcpy(x_axis_label, "30 Days");
+    } else if (depth_timeSpan == 36){
+      strcpy(x_axis_label, "One Year");
+    }
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time Span: %i", depth_timeSpan);
   }
-  
+    
   
 }
 
@@ -228,6 +248,12 @@ if (depth_tuple) {
     axis_label();
     layer_mark_dirty(text_layer_get_layer(graph_title_layer));
     APP_LOG(APP_LOG_LEVEL_DEBUG, "graph title updated"); 
+  }
+  
+  if(x_axis_label_layer) {
+    axis_label();
+    layer_mark_dirty(text_layer_get_layer(x_axis_label_layer));
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "x-Axis label updated");
   }
 }
 
