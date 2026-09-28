@@ -9,15 +9,18 @@ static Layer *s_canvas_layer;
 static Layer *s_tic_layer;
 static TextLayer *x_axis_label_layer;
 static TextLayer *graph_title_layer;
+static TextLayer *error_layer;
 
 static uint8_t s_depth_data[192];
 static uint16_t s_depth_data16[96];
 static int16_t s_num_points = 0;
 static char label_unit[10] = "";
 static char graph_title[15] = "Depth";
-static char x_axis_label[15] = "One Week";
-
-
+static char x_axis_label[15] = "";
+static int8_t timeSpan = 0;
+static uint8_t depth_error = 0;
+static uint8_t graphDrawn = 0;
+static char emptystring[5] = "";
 
 int depth_min = 2550;
 int depth_max = 50;
@@ -26,68 +29,88 @@ static void  axis_label(){
   text_layer_set_text(x_axis_label_layer, x_axis_label);
   snprintf(graph_title, sizeof(graph_title), "Depth %s", label_unit);
   text_layer_set_text(graph_title_layer, graph_title);
+  //use pre-defined emptystring. This function doesn't always like a direct string as input
+  //i.e. "" as the second argument.
+  text_layer_set_text(error_layer, emptystring);
+}
+
+static void error_label(){
+  text_layer_set_text(error_layer, "Error loading data");
+  //use pre-defined emptystring. This function doesn't always like a direct string as input
+  //i.e. "" as the second argument.
+  text_layer_set_text(graph_title_layer, emptystring);
 }
 
 //tic mark update
 static void tic_update_proc(Layer *layer, GContext *ctx){
-  GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
-  GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_context_set_fill_color(ctx, CanvasBackgroundColor);
-  graphics_context_set_stroke_color(ctx, CanvasStrokeColor);
-  graphics_context_set_antialiased(ctx, 1);
-  GRect tic_bounds = layer_get_bounds(layer);
-  GRect graph_bounds = layer_get_bounds(s_canvas_layer);
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 1");
   
-  int tic_width = tic_bounds.size.w;
-  int tic_height = tic_bounds.size.h;
-  int graph_width = graph_bounds.size.w;
-  int graph_height = graph_bounds.size.h;
+  //only draw tic marks and labels if the data is recieved without error
+  if (depth_error == 0){
+    
   
-  uint16_t depth_range = depth_max - depth_min;
-  //avoid depth range of 0
-  if (depth_range == 0){
-    depth_range = 1;
-  }
-  
-  //Draw y and x axis tic marks
-  int num_tics_y = 7;
-  int num_tics_x = 7;
-  int x_scale = graph_width / num_tics_x;
-  int y_scale = graph_height / num_tics_y;
-
-  //int tic_offset = 5;
-  static char buffer[10];
-  //uint16_t tic_label_offset = (((tic_offset * 1000) / height) * depth_range) / 1000;
-  int label_offset = 6;
-  printf("graph width + height: %i %i", graph_width, graph_height);
-  printf("y_scale, x_scale: %i %i", y_scale, x_scale);
-  
-  //Y-Axis
-  for (int i = 1; i < num_tics_y; i++){
-      //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
-      graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
-      uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
-      //printf("tic_value: %lu", tic_value);
-      
-      uint32_t tic_label = tic_value / 100;
-      uint32_t tic_label_rem = tic_value % 100;
-      tic_label_rem = tic_label_rem / 10;    
-      
-      snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
-      graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+    GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
+    GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_context_set_fill_color(ctx, CanvasBackgroundColor);
+    graphics_context_set_stroke_color(ctx, CanvasStrokeColor);
+    graphics_context_set_antialiased(ctx, 1);
+    GRect tic_bounds = layer_get_bounds(layer);
+    GRect graph_bounds = layer_get_bounds(s_canvas_layer);
+    
+    int tic_width = tic_bounds.size.w;
+    int tic_height = tic_bounds.size.h;
+    int graph_width = graph_bounds.size.w;
+    int graph_height = graph_bounds.size.h;
+    
+    uint16_t depth_range = depth_max - depth_min;
+    //avoid depth range of 0
+    if (depth_range == 0){
+      depth_range = 1;
     }
-  //X-Axis
-  for (int i = 1; i <= (num_tics_x - 1); i++){
-    graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
+    
+    //Draw y and x axis tic marks
+    int num_tics_y = 7;
+    int num_tics_x = 7;
+    int x_scale = graph_width / num_tics_x;
+    int y_scale = graph_height / num_tics_y;
+  
+    //int tic_offset = 5;
+    static char buffer[10];
+    //uint16_t tic_label_offset = (((tic_offset * 1000) / height) * depth_range) / 1000;
+    int label_offset = 6;
+    //printf("graph width + height: %i %i", graph_width, graph_height);
+    //printf("y_scale, x_scale: %i %i", y_scale, x_scale);
+    
+    //Y-Axis
+    for (int i = 1; i < num_tics_y; i++){
+        //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
+        graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
+        uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
+        //printf("tic_value: %lu", tic_value);
+        
+        uint32_t tic_label = tic_value / 100;
+        uint32_t tic_label_rem = tic_value % 100;
+        tic_label_rem = tic_label_rem / 10;
+            
+        snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
+        graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      }
+    //X-Axis
+    for (int i = 1; i <= (num_tics_x - 1); i++){
+      graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
+    }
   }
-  
-  
 }
 
 //Graph Update. Must be called first
 static void canvas_update_proc(Layer *layer, GContext *ctx){
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 2");
+  
+  //set graph not drawn
+  graphDrawn = 0;
+  printf("Canvas update");
   //Reset min and max to prevent multiple canvas updates adding/subtracting 50 multiple times.
   depth_min = 65535;
   depth_max = 50;
@@ -158,119 +181,218 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
     uint32_t y2 = height - ((height * (((s_depth_data16[i + 1] - depth_min) * 1000) / depth_range)) / 1000);
 
     
-//     printf("x1: %i", x1);
-//     printf("y1: %i", y1);
-//     printf("x2: %i", x2);
-//     printf("y2: %i", y2);
-    
     graphics_draw_line(ctx, GPoint(x1, y1), GPoint(x2, y2));
-    
   
   }
+
 }
   
 
 // AppMessage callbacks
 static void inbox_received_callback(DictionaryIterator *iterator, void *context) {
+  APP_LOG(APP_LOG_LEVEL_INFO, "Inbox recieved");
   // Read tuples for weather data
    Tuple *depth_tuple = dict_find(iterator, MESSAGE_KEY_CHART_DATA);
    Tuple *depth_tuple_unit = dict_find(iterator, MESSAGE_KEY_UNITS);
-   Tuple *depth_tuple_timeSpan = dict_find(iterator, MESSAGE_KEY_TIME_SPAN);
+   Tuple *depth_tuple_error = dict_find(iterator, MESSAGE_KEY_REQUEST_ERROR);
+   //capture error value
+  depth_error = depth_tuple_error->value->uint8;
+  printf("error: %i", depth_error);
+if (depth_error == 0) {
   
- // Determine unit label based on message key value 
-  if (depth_tuple_unit){
-    uint8_t depth_unit = depth_tuple_unit->value->uint8;
-    uint8_t unit = depth_unit;
-    if (unit == 0){
-      strcpy(label_unit, "(ft)");
-    }else if (unit == 1){
-      strcpy(label_unit, "(m)");
-    }else{
-      strcpy(label_unit, "(ft)");
-    }
-    
-//Determine x-axis label based on message key value
-  if (depth_tuple_timeSpan){
-    uint8_t depth_timeSpan = depth_tuple_timeSpan->value->uint8;
-    
-    if (depth_timeSpan == 1){
-      strcpy(x_axis_label, "One Day");
-    } else if (depth_timeSpan == 3){
-      strcpy(x_axis_label, "Three Days");
-    } else if (depth_timeSpan == 7){
-      strcpy(x_axis_label, "One Week");
-    } else if (depth_timeSpan == 30){
-      strcpy(x_axis_label, "30 Days");
-    } else if (depth_timeSpan == 36){
-      strcpy(x_axis_label, "One Year");
-    }
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time Span: %i", depth_timeSpan);
-  }
-    
-  
-}
-
-if (depth_tuple) {
-    // depth_tuple->value->data is our array of 96 bytes
-    uint8_t *depth_data = depth_tuple->value->data;
-    uint16_t num_points = depth_tuple->length;
-  
-    //Copy data from app message into local variables
-    s_num_points = num_points;
-    memcpy(s_depth_data, depth_data, s_num_points);
-  
-    //shrink num_points to better fit on display
-    s_num_points = s_num_points / 2;
-  
-    int j = 0;
-  //reconstruct data into 16 bit numbers
-    for (int i = 0; i < num_points; i+=2){
-      uint16_t highBit = s_depth_data[i] << 8;
-      uint16_t lowBit = s_depth_data[i+1];
-      s_depth_data16[j] = highBit + lowBit;
-      //printf("num_points %i", num_points);
-      //printf("reconstructedBits: %i", s_depth_data16[j]);
-      j++;
+   // Determine unit label based on message key value 
+    if (depth_tuple_unit){
+      uint8_t depth_unit = depth_tuple_unit->value->uint8;
+      uint8_t unit = depth_unit;
+      if (unit == 0){
+        strcpy(label_unit, "(ft)");
+      }else if (unit == 1){
+        strcpy(label_unit, "(m)");
+      }else{
+        strcpy(label_unit, "(ft)");
+      }
       
-    }
+  //Determine x-axis label based on message key value
+      //uint8_t depth_timeSpan = depth_tuple_timeSpan->value->uint8;
+      
+      if (timeSpan == 0){
+        strcpy(x_axis_label, "One Day");
+      } else if (timeSpan == 1){
+        strcpy(x_axis_label, "Three Days");
+      } else if (timeSpan == 2){
+        strcpy(x_axis_label, "One Week");
+      } else if (timeSpan == 3){
+        strcpy(x_axis_label, "30 Days");
+      } else if (timeSpan == 4){
+        strcpy(x_axis_label, "One Year");
+      }
+      //APP_LOG(APP_LOG_LEVEL_DEBUG, "Time Span: %i", timeSpan);
+    
+      
+    
   
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Received %d points", num_points); 
-
-  }
+  
+  if (depth_tuple) {
+      // depth_tuple->value->data is our array of 96 bytes
+      uint8_t *depth_data = depth_tuple->value->data;
+      uint16_t num_points = depth_tuple->length;
+    
+      //Copy data from app message into local variables
+      s_num_points = num_points;
+      memcpy(s_depth_data, depth_data, s_num_points);
+    
+      //shrink num_points to better fit on display
+      s_num_points = s_num_points / 2;
+    
+      int j = 0;
+    //reconstruct data into 16 bit numbers
+      for (int i = 0; i < num_points; i+=2){
+        uint16_t highBit = s_depth_data[i] << 8;
+        uint16_t lowBit = s_depth_data[i+1];
+        s_depth_data16[j] = highBit + lowBit;
+        //printf("num_points %i", num_points);
+        //printf("reconstructedBits: %i", s_depth_data16[j]);
+        j++;
+        
+      }
+    
+      //APP_LOG(APP_LOG_LEVEL_DEBUG, "Received %d points", num_points); 
+  }   
+}
+}
   
   //Update canvas
   if(s_canvas_layer) {
       layer_mark_dirty(s_canvas_layer);
       //printf("canvas updated. Latest height: %i", s_depth_data[s_num_points]);
-      
+      //graphDrawn = 1;
     }
   if(graph_title_layer){
     axis_label();
     layer_mark_dirty(text_layer_get_layer(graph_title_layer));
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "graph title updated"); 
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "graph title updated"); 
   }
   
   if(x_axis_label_layer) {
     axis_label();
     layer_mark_dirty(text_layer_get_layer(x_axis_label_layer));
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "x-Axis label updated");
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "x-Axis label updated");
   }
-}
+    
+  if(error_layer && depth_error == 1){
+    error_label();
+    layer_mark_dirty(text_layer_get_layer(error_layer));
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "error message updated");
+  }
+ }
 
 
 static void inbox_dropped_callback(AppMessageResult reason, void *context) {
-  APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped!");
+  //APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped!");
 }
 
 static void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
-  APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
+  //APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
 }
 
 static void outbox_sent_callback(DictionaryIterator *iterator, void *context) {
-  APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
+  //APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
 }
 
+
+void long_down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  //set up dictionary iterator
+  DictionaryIterator *out_iter;
+  //prepare outbox
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  uint8_t requestData = 1;
+  
+  //make sure outbox is prepared correctly
+  if(result == APP_MSG_OK) {
+  // add value to dictionary
+  dict_write_int(out_iter, MESSAGE_KEY_TIME_SPAN, &timeSpan, sizeof(uint8_t), true);
+  dict_write_int(out_iter, MESSAGE_KEY_REFRESH_DATA, &requestData, sizeof(int8_t), true);
+
+  } else {
+  // The outbox cannot be used right now
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+  }
+  //now send data if dictionary was created successfully
+  result = app_message_outbox_send();
+
+  // Check the result
+  if(result != APP_MSG_OK) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+  }
+  
+}
+
+void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  
+  timeSpan += 1;
+  if (timeSpan > 4){
+    timeSpan = 0;
+  }
+  
+  //set up dictionary iterator
+  DictionaryIterator *out_iter;
+  //prepare outbox
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  //make sure outbox is prepared correctly
+  if(result == APP_MSG_OK) {
+  // add value to dictionary
+  dict_write_int(out_iter, MESSAGE_KEY_TIME_SPAN, &timeSpan, sizeof(int8_t), true);
+
+  } else {
+  // The outbox cannot be used right now
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+  }
+  //now send data if dictionary was created successfully
+  result = app_message_outbox_send();
+
+  // Check the result
+  if(result != APP_MSG_OK) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+  }
+  
+}
+
+void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  
+  timeSpan -= 1;
+  if (timeSpan < 0){
+    timeSpan = 4;
+  }
+  
+  //set up dictionary iterator
+  DictionaryIterator *out_iter;
+  //prepare outbox
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  
+  //make sure outbox is prepared correctly
+  if(result == APP_MSG_OK) {
+  // add value to dictionary
+  dict_write_int(out_iter, MESSAGE_KEY_TIME_SPAN, &timeSpan, sizeof(int8_t), true);
+
+  } else {
+  // The outbox cannot be used right now
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error preparing the outbox: %d", (int)result);
+  }
+  //now send data if dictionary was created successfully
+  result = app_message_outbox_send();
+
+  // Check the result
+  if(result != APP_MSG_OK) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Error sending the outbox: %d", (int)result);
+  }
+  
+}
+
+
 static void main_window_load(Window *window) {
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 4");
   Layer *window_layer = window_get_root_layer(window);
   GRect window_bounds = layer_get_bounds(window_layer);
   
@@ -285,10 +407,9 @@ static void main_window_load(Window *window) {
   GRect bounds = layer_get_bounds(window_layer);
   s_canvas_layer = layer_create(GRect(27, 20, (bounds.size.w - 35), (bounds.size.h - 30)));
   layer_set_update_proc(s_canvas_layer, canvas_update_proc);
-  
   s_tic_layer = layer_create(GRect(0, 20, (bounds.size.w), (bounds.size.h - 30)));
-  layer_set_update_proc(s_tic_layer, tic_update_proc);
   
+  layer_set_update_proc(s_tic_layer, tic_update_proc);
   GRect graph_bounds = layer_get_bounds(s_canvas_layer);
   int graph_width = graph_bounds.size.w;
   
@@ -305,13 +426,19 @@ static void main_window_load(Window *window) {
   text_layer_set_text_color(graph_title_layer, GColorBlack);
   text_layer_set_font(graph_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_text_alignment(graph_title_layer, GTextAlignmentCenter);
-  axis_label();
   
+  //set up error layer
+  error_layer = text_layer_create(GRect(0, 0, bounds.size.w, 20));
+  text_layer_set_background_color(error_layer, GColorClear);
+  text_layer_set_text_color(error_layer, GColorBlack);
+  text_layer_set_font(error_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_text_alignment(error_layer, GTextAlignmentCenter);
   
   layer_add_child(window_layer, s_canvas_layer);
   layer_add_child(window_layer, s_tic_layer);
   layer_add_child(window_layer, text_layer_get_layer(x_axis_label_layer));
   layer_add_child(window_layer, text_layer_get_layer(graph_title_layer));
+  layer_add_child(window_layer, text_layer_get_layer(error_layer));
 
   
   
@@ -322,11 +449,28 @@ static void main_window_unload(Window *window) {
   layer_destroy(s_tic_layer);
   text_layer_destroy(x_axis_label_layer);
   text_layer_destroy(graph_title_layer);
+  text_layer_destroy(error_layer);
   
   
 }
 
+
+static void click_config_provider(void *context) {
+  ButtonId id_up = BUTTON_ID_UP;  // The Select button
+  ButtonId id_down = BUTTON_ID_DOWN;
+  ButtonId id_select = BUTTON_ID_SELECT;  // The select button
+  uint16_t delay_ms = 1000;         // Minimum time pressed to fire
+
+  window_long_click_subscribe(id_select, delay_ms, long_down_click_handler, NULL);
+  window_single_click_subscribe(id_up, up_click_handler);
+  window_single_click_subscribe(id_down, down_click_handler);
+}
+
+
+
+
 static void init() {
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 5");
   GColor  WindowColor = PBL_IF_COLOR_ELSE(GColorGreen, GColorWhite);
   s_main_window = window_create();
    window_set_background_color(s_main_window, WindowColor);
@@ -334,6 +478,11 @@ static void init() {
     .load = main_window_load,
     .unload = main_window_unload
   });
+  
+  window_set_click_config_provider(s_main_window, click_config_provider);
+  
+  window_stack_push(s_main_window, true);
+  
   window_stack_push(s_main_window, true);
 
 
