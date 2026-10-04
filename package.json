@@ -37,8 +37,10 @@
         "targetPlatforms": [
             "aplite",
             "basalt",
+            "chalk",
             "diorite",
             "emery",
+            "gabbro",
             "flint"
         ],
         "uuid": "4f39d702-5fcd-4794-a344-9e6bc31e4a4c",

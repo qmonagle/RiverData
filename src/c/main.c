@@ -1,6 +1,16 @@
 #include <pebble.h>
 #include <math.h>
 
+#if defined(PBL_RECT)
+  uint8_t Round = 0;
+
+  /* Rectangular UI code */
+#elif defined(PBL_ROUND)
+  uint8_t Round = 1;
+  
+  /* Round UI code */
+#endif
+
 
 static Window *s_main_window;
 
@@ -25,6 +35,29 @@ static char emptystring[5] = "";
 int depth_min = 2550;
 int depth_max = 50;
 
+
+static int32_t isqrt(int32_t n) {
+  //calculate sqaure root with integer input/output.
+  if (n <= 0) return 0;
+  int32_t x = n;
+  int32_t y = (x + 1) / 2;
+  while (y < x) {
+    x = y;
+    y = (x + n / x) / 2;
+  }
+  return x;
+}
+
+static int16_t findCirlceEdge(int16_t Diameter, int32_t y){
+  //for use on circular displays
+  //given a diameter and y value, returns the x position corresponding to the edge of the display or window.
+  
+  int32_t radicand = ((Diameter / 2) * (Diameter / 2)) - ((y - (Diameter / 2)) * (y - (Diameter / 2)));
+  int16_t x = -isqrt(radicand) + Diameter / 2;
+  return x;
+}
+
+
 static void  axis_label(){
   text_layer_set_text(x_axis_label_layer, x_axis_label);
   snprintf(graph_title, sizeof(graph_title), "Depth %s", label_unit);
@@ -48,6 +81,7 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
   //only draw tic marks and labels if the data is recieved without error
   if (depth_error == 0){
     
+    
   
     GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
     GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
@@ -58,6 +92,17 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
     graphics_context_set_antialiased(ctx, 1);
     GRect tic_bounds = layer_get_bounds(layer);
     GRect graph_bounds = layer_get_bounds(s_canvas_layer);
+    
+    //extract layer data
+    //this struct must match the one created used for the tic layer data
+    typedef struct{
+      uint16_t canvasX;
+      uint16_t canvasLength;
+    } layer_data;
+    
+    layer_data *tic_layer_data = (layer_data *)layer_get_data(layer);
+    uint16_t canvasStartX = tic_layer_data->canvasX;
+    uint16_t canvasLen = tic_layer_data->canvasLength;
     
     int tic_width = tic_bounds.size.w;
     int tic_height = tic_bounds.size.h;
@@ -86,6 +131,8 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
     //Y-Axis
     for (int i = 1; i < num_tics_y; i++){
         //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
+        //determine square or round screen
+      if (Round == 0){
         graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
         uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
         //printf("tic_value: %lu", tic_value);
@@ -96,7 +143,20 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
             
         snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
         graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      } else {
+          graphics_draw_line(ctx, GPoint(canvasStartX, (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
+          uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
+          //printf("tic_value: %lu", tic_value);
+        
+          uint32_t tic_label = tic_value / 100;
+          uint32_t tic_label_rem = tic_value % 100;
+          tic_label_rem = tic_label_rem / 10;
+            
+          snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
+          graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(10, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+        
       }
+    }
     //X-Axis
     for (int i = 1; i <= (num_tics_x - 1); i++){
       graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
@@ -110,7 +170,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   
   //set graph not drawn
   graphDrawn = 0;
-  printf("Canvas update");
+  //printf("Canvas update");
   //Reset min and max to prevent multiple canvas updates adding/subtracting 50 multiple times.
   depth_min = 65535;
   depth_max = 50;
@@ -165,6 +225,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   
   
   //Draw graph border. Fill with color if available
+
   PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 0, GCornerNone), graphics_draw_rect(ctx, GRect(0, 0, width, height)));
   
   uint16_t depth_range = depth_max - depth_min;
@@ -403,14 +464,45 @@ static void main_window_load(Window *window) {
   
 
   
-  // Create the canvas layer and axis label layer
+  // Create the canvas and tic layer and axis label layer
   GRect bounds = layer_get_bounds(window_layer);
-  s_canvas_layer = layer_create(GRect(27, 20, (bounds.size.w - 35), (bounds.size.h - 30)));
-  layer_set_update_proc(s_canvas_layer, canvas_update_proc);
-  s_tic_layer = layer_create(GRect(0, 20, (bounds.size.w), (bounds.size.h - 30)));
   
+  //set up canvas and tic layers based on square or round display
+  if (Round == 0){
+    s_canvas_layer = layer_create(GRect(27, 20, (width - 35), (height - 30)));
+    s_tic_layer = layer_create(GRect(0, 20, (bounds.size.w), (bounds.size.h - 30)));
+  } else{
+    //calculate the starting point based on circular display size
+      int16_t x = 0;
+      int16_t y = 0;
+      int16_t screenDiameter = width;
+      int16_t screenRadius = screenDiameter / 2;
+      
+      //side length of largest square that can fit inside window/display area
+      uint16_t sideLength = isqrt(((screenDiameter * screenDiameter) / 2));
+      //find x and y coordinates of top left corner of square
+      uint16_t rectY = -isqrt(((screenRadius) * (screenRadius)) - ((sideLength / 2) * (sideLength / 2))) + screenRadius;
+      uint16_t rectX = findCirlceEdge(screenDiameter, rectY);
+      s_canvas_layer = layer_create(GRect(rectX, rectY, sideLength, sideLength));
+      
+      GRect graph_bounds = layer_get_bounds(s_canvas_layer);
+    
+      typedef struct{
+        uint16_t canvasX;
+        uint16_t canvasLength;
+      } layer_data;
+    
+      //create tic later with full display width, but the same height as the canvas layer.
+      s_tic_layer = layer_create_with_data(GRect(0, rectY, bounds.size.w, graph_bounds.size.h), sizeof(layer_data));
+      //create pointer to allocated tic layer data,set values
+      layer_data *tic_layer_data = (layer_data *)layer_get_data(s_tic_layer);
+      tic_layer_data->canvasX = rectX;
+      tic_layer_data->canvasLength = sideLength;
+    }
+  layer_set_update_proc(s_canvas_layer, canvas_update_proc);
   layer_set_update_proc(s_tic_layer, tic_update_proc);
-  GRect graph_bounds = layer_get_bounds(s_canvas_layer);
+  
+  GRect graph_bounds = layer_get_bounds(s_canvas_layer);  
   int graph_width = graph_bounds.size.w;
   
   //Set up x axis text
@@ -439,6 +531,13 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(x_axis_label_layer));
   layer_add_child(window_layer, text_layer_get_layer(graph_title_layer));
   layer_add_child(window_layer, text_layer_get_layer(error_layer));
+  
+  //Set text flow for round displays
+  if (Round == 1) {
+  text_layer_enable_screen_text_flow_and_paging(x_axis_label_layer, 5);
+  text_layer_enable_screen_text_flow_and_paging(graph_title_layer, 5);
+  text_layer_enable_screen_text_flow_and_paging(error_layer, 5);
+  }
 
   
   
