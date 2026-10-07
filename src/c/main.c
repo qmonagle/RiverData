@@ -48,12 +48,20 @@ static int32_t isqrt(int32_t n) {
   return x;
 }
 
-static int16_t findCirlceEdge(int16_t Diameter, int32_t y){
+static int16_t findCirlceEdge(int16_t Diameter, int32_t y, int8_t sign){
   //for use on circular displays
   //given a diameter and y value, returns the x position corresponding to the edge of the display or window.
   
+  int16_t x = 0;
+  
   int32_t radicand = ((Diameter / 2) * (Diameter / 2)) - ((y - (Diameter / 2)) * (y - (Diameter / 2)));
-  int16_t x = -isqrt(radicand) + Diameter / 2;
+  //make sure sign input is either 1 or -1
+  if (sign > 1){
+    x = isqrt(radicand) + Diameter / 2;
+  }else if (sign < 1) {
+    x = -isqrt(radicand) + Diameter / 2;
+  }
+
   return x;
 }
 
@@ -144,7 +152,7 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
         snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
         graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
       } else {
-          graphics_draw_line(ctx, GPoint(canvasStartX, (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
+          graphics_draw_line(ctx, GPoint((canvasStartX), (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
           uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
           //printf("tic_value: %lu", tic_value);
         
@@ -153,15 +161,21 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
           tic_label_rem = tic_label_rem / 10;
             
           snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
-          graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(10, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+          graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(25, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
         
       }
     }
     //X-Axis
-    for (int i = 1; i <= (num_tics_x - 1); i++){
-      graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
-    }
+    if (Round == 0){
+      for (int i = 1; i <= (num_tics_x - 1); i++){
+        graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
+      }
+    } else{
+        for (int i = 1; i <= (num_tics_x - 1); i++){
+        graphics_draw_line(ctx, GPoint(((x_scale * i) + canvasStartX), (graph_height)), GPoint(((x_scale * i) + canvasStartX), 0));
+      }
   }
+}
 }
 
 //Graph Update. Must be called first
@@ -226,7 +240,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   
   //Draw graph border. Fill with color if available
 
-  PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 0, GCornerNone), graphics_draw_rect(ctx, GRect(0, 0, width, height)));
+  PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 8, GCornersAll), graphics_draw_round_rect(ctx, GRect(0, 0, width, height), 8));
   
   uint16_t depth_range = depth_max - depth_min;
   //check to avoid divide by 0 error
@@ -473,18 +487,17 @@ static void main_window_load(Window *window) {
     s_tic_layer = layer_create(GRect(0, 20, (bounds.size.w), (bounds.size.h - 30)));
   } else{
     //calculate the starting point based on circular display size
-      int16_t x = 0;
-      int16_t y = 0;
       int16_t screenDiameter = width;
       int16_t screenRadius = screenDiameter / 2;
       
-      //side length of largest square that can fit inside window/display area
-      uint16_t sideLength = isqrt(((screenDiameter * screenDiameter) / 2));
+      //side length of largest square that can fit inside window/display area. subtract 20 for a slightly shorter top length.
+      uint16_t topLength = isqrt(((screenDiameter * screenDiameter) / 2)) - 20;
       //find x and y coordinates of top left corner of square
-      uint16_t rectY = -isqrt(((screenRadius) * (screenRadius)) - ((sideLength / 2) * (sideLength / 2))) + screenRadius;
-      uint16_t rectX = findCirlceEdge(screenDiameter, rectY);
-      s_canvas_layer = layer_create(GRect(rectX, rectY, sideLength, sideLength));
-      
+      uint16_t TopLeftY = -isqrt(((screenRadius) * (screenRadius)) - ((topLength / 2) * (topLength / 2))) + screenRadius;
+      uint16_t TopLeftX = findCirlceEdge(screenDiameter, TopLeftY, -1);
+      uint16_t BottomLeftY = isqrt(((screenRadius) * (screenRadius)) - ((topLength / 2) * (topLength / 2))) + screenRadius; 
+      s_canvas_layer = layer_create(GRect(TopLeftX, TopLeftY, topLength, (BottomLeftY - TopLeftY)));
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "BottomLeftY=%d TopLeftY=%d TopLeftX=%d screenRadius=%d", (int)BottomLeftY, (int)TopLeftY, (int)TopLeftX, (int)screenRadius);
       GRect graph_bounds = layer_get_bounds(s_canvas_layer);
     
       typedef struct{
@@ -493,11 +506,11 @@ static void main_window_load(Window *window) {
       } layer_data;
     
       //create tic later with full display width, but the same height as the canvas layer.
-      s_tic_layer = layer_create_with_data(GRect(0, rectY, bounds.size.w, graph_bounds.size.h), sizeof(layer_data));
+      s_tic_layer = layer_create_with_data(GRect(0, TopLeftY, bounds.size.w, graph_bounds.size.h), sizeof(layer_data));
       //create pointer to allocated tic layer data,set values
       layer_data *tic_layer_data = (layer_data *)layer_get_data(s_tic_layer);
-      tic_layer_data->canvasX = rectX;
-      tic_layer_data->canvasLength = sideLength;
+      tic_layer_data->canvasX = TopLeftX;
+      tic_layer_data->canvasLength = topLength;
     }
   layer_set_update_proc(s_canvas_layer, canvas_update_proc);
   layer_set_update_proc(s_tic_layer, tic_update_proc);
@@ -506,14 +519,14 @@ static void main_window_load(Window *window) {
   int graph_width = graph_bounds.size.w;
   
   //Set up x axis text
-  x_axis_label_layer = text_layer_create(GRect(27, (height-14), graph_width, 25));
+  x_axis_label_layer = text_layer_create(GRect(27, (height-30), graph_width, 25));
   text_layer_set_background_color(x_axis_label_layer, GColorClear);
   text_layer_set_text_color(x_axis_label_layer, GColorBlack);
   text_layer_set_font(x_axis_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(x_axis_label_layer, GTextAlignmentCenter);
   
   //Set up Graph Title
-  graph_title_layer = text_layer_create(GRect(27, 0, graph_width, 20));
+  graph_title_layer = text_layer_create(GRect(27, 5, graph_width, 20));
   text_layer_set_background_color(graph_title_layer, GColorClear);
   text_layer_set_text_color(graph_title_layer, GColorBlack);
   text_layer_set_font(graph_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
