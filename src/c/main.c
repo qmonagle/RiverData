@@ -16,6 +16,7 @@ static Window *s_main_window;
 
 
 static Layer *s_canvas_layer;
+static Layer *s_whole_screen_layer;
 static Layer *s_tic_layer;
 static TextLayer *x_axis_label_layer;
 static TextLayer *graph_title_layer;
@@ -108,9 +109,6 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
       uint16_t canvasLength;
     } layer_data;
     
-    layer_data *tic_layer_data = (layer_data *)layer_get_data(layer);
-    uint16_t canvasStartX = tic_layer_data->canvasX;
-    uint16_t canvasLen = tic_layer_data->canvasLength;
     
     int tic_width = tic_bounds.size.w;
     int tic_height = tic_bounds.size.h;
@@ -136,11 +134,13 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
     //printf("graph width + height: %i %i", graph_width, graph_height);
     //printf("y_scale, x_scale: %i %i", y_scale, x_scale);
     
-    //Y-Axis
+    
     for (int i = 1; i < num_tics_y; i++){
         //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
         //determine square or round screen
       if (Round == 0){
+        
+        //Y-Axis
         graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
         uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
         //printf("tic_value: %lu", tic_value);
@@ -151,7 +151,20 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
             
         snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
         graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+        
+        //X Axis
+        for (int i = 1; i <= (num_tics_x - 1); i++){
+        graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
+      }
+        
       } else {
+        
+          //Y-Axis
+          //set up variables for the layer data (round display only)
+          layer_data *tic_layer_data = (layer_data *)layer_get_data(layer);
+          uint16_t canvasStartX = tic_layer_data->canvasX;
+          uint16_t canvasLen = tic_layer_data->canvasLength;
+        
           graphics_draw_line(ctx, GPoint((canvasStartX), (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
           uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
           //printf("tic_value: %lu", tic_value);
@@ -163,24 +176,37 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
           snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
           graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(25, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
         
+          //X Axis
+          for (int i = 1; i <= (num_tics_x - 1); i++){
+          graphics_draw_line(ctx, GPoint(((x_scale * i) + canvasStartX), (graph_height)), GPoint(((x_scale * i) + canvasStartX), 0));
+          }
+        
       }
     }
-    //X-Axis
-    if (Round == 0){
-      for (int i = 1; i <= (num_tics_x - 1); i++){
-        graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
-      }
-    } else{
-        for (int i = 1; i <= (num_tics_x - 1); i++){
-        graphics_draw_line(ctx, GPoint(((x_scale * i) + canvasStartX), (graph_height)), GPoint(((x_scale * i) + canvasStartX), 0));
-      }
   }
 }
+
+
+static void whole_screen_update_proc(Layer *layer, GContext *ctx){
+  //this update proc is for the layer covering the whole screen. Only used on round displays.
+  GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
+  GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
+  graphics_context_set_stroke_width(ctx, 5);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_fill_color(ctx, CanvasBackgroundColor);
+  graphics_context_set_stroke_color(ctx, CanvasStrokeColor);
+  graphics_context_set_antialiased(ctx, 1);
+  
+  GRect layer_bounds = layer_get_bounds(layer);
+  uint16_t screenWidth = layer_bounds.size.w;
+  uint16_t screenHeight = layer_bounds.size.h;
+    
+  //PBL_IF_ROUND_ELSE(graphics_draw_circle(ctx, GPoint((screenWidth / 2), (screenHeight / 2)), (screenWidth / 2)), graphics_draw_rect(ctx, GRect(0, 0, (screenWidth - 20), (screenHeight - 20))));
 }
 
 //Graph Update. Must be called first
 static void canvas_update_proc(Layer *layer, GContext *ctx){
-  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 2");
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 2");
   
   //set graph not drawn
   graphDrawn = 0;
@@ -238,10 +264,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   int height = layer_bounds.size.h;
   
   
-  //Draw graph border. Fill with color if available
+  //Draw graph border. Fill background color if color watch. Draw extra outline if round display.
 
-  PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 8, GCornersAll), graphics_draw_round_rect(ctx, GRect(0, 0, width, height), 8));
+  PBL_IF_COLOR_ELSE(graphics_fill_rect(ctx, GRect(0, 0, width, height), 4, GCornersAll), graphics_draw_round_rect(ctx, GRect(0, 0, width, height), 4));
+  PBL_IF_COLOR_ELSE(graphics_draw_round_rect(ctx, GRect(0, 0, width, height), 8), NULL);
+  //get window to obtain screen resolution
   
+  
+
   uint16_t depth_range = depth_max - depth_min;
   //check to avoid divide by 0 error
   if (depth_range == 0){
@@ -259,21 +289,30 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
     graphics_draw_line(ctx, GPoint(x1, y1), GPoint(x2, y2));
   
   }
-
+APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 3");
 }
   
 
 // AppMessage callbacks
 static void inbox_received_callback(DictionaryIterator *iterator, void *context) {
+  
   APP_LOG(APP_LOG_LEVEL_INFO, "Inbox recieved");
+  
   // Read tuples for weather data
-   Tuple *depth_tuple = dict_find(iterator, MESSAGE_KEY_CHART_DATA);
-   Tuple *depth_tuple_unit = dict_find(iterator, MESSAGE_KEY_UNITS);
-   Tuple *depth_tuple_error = dict_find(iterator, MESSAGE_KEY_REQUEST_ERROR);
+  Tuple *depth_tuple = dict_find(iterator, MESSAGE_KEY_CHART_DATA);
+  
+  Tuple *depth_tuple_unit = dict_find(iterator, MESSAGE_KEY_UNITS);
+  
+  Tuple *depth_tuple_error = dict_find(iterator, MESSAGE_KEY_REQUEST_ERROR);
+  
    //capture error value
-  depth_error = depth_tuple_error->value->uint8;
-  printf("error: %i", depth_error);
-if (depth_error == 0) {
+  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Inbox Recieved Checkpoint");
+  if(depth_tuple_error){
+    depth_error = depth_tuple_error->value->uint8;
+  }
+  
+  if (depth_error == 0) {
   
    // Determine unit label based on message key value 
     if (depth_tuple_unit){
@@ -331,12 +370,15 @@ if (depth_error == 0) {
         
       }
     
-      //APP_LOG(APP_LOG_LEVEL_DEBUG, "Received %d points", num_points); 
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Received %d points", num_points); 
   }   
 }
 }
   
   //Update canvas
+  if(s_whole_screen_layer){
+    layer_mark_dirty(s_whole_screen_layer);
+  }
   if(s_canvas_layer) {
       layer_mark_dirty(s_canvas_layer);
       //printf("canvas updated. Latest height: %i", s_depth_data[s_num_points]);
@@ -359,19 +401,23 @@ if (depth_error == 0) {
     layer_mark_dirty(text_layer_get_layer(error_layer));
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "error message updated");
   }
+  
+  if(s_whole_screen_layer){
+    layer_mark_dirty(s_whole_screen_layer);
+  }
  }
 
 
 static void inbox_dropped_callback(AppMessageResult reason, void *context) {
-  //APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped!");
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped!");
 }
 
 static void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
-  //APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
 }
 
 static void outbox_sent_callback(DictionaryIterator *iterator, void *context) {
-  //APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
+  APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
 }
 
 
@@ -467,7 +513,7 @@ void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 
 static void main_window_load(Window *window) {
-  //APP_LOG(APP_LOG_LEVEL_DEBUG, "Checkpoint 4");
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Main window load");
   Layer *window_layer = window_get_root_layer(window);
   GRect window_bounds = layer_get_bounds(window_layer);
   
@@ -475,8 +521,8 @@ static void main_window_load(Window *window) {
   int height = window_bounds.size.h;
   
   
-  
-
+  s_whole_screen_layer = layer_create(GRect(0, 0, width, height));
+  layer_set_update_proc(s_whole_screen_layer, whole_screen_update_proc);
   
   // Create the canvas and tic layer and axis label layer
   GRect bounds = layer_get_bounds(window_layer);
@@ -519,14 +565,25 @@ static void main_window_load(Window *window) {
   int graph_width = graph_bounds.size.w;
   
   //Set up x axis text
-  x_axis_label_layer = text_layer_create(GRect(27, (height-30), graph_width, 25));
+    //Adjust the x axis label for square/round screen
+  if (Round == 0){
+    x_axis_label_layer = text_layer_create(GRect(27, (height - 14), graph_width, 25));
+  }else{
+    x_axis_label_layer = text_layer_create(GRect(27, (height - 30), graph_width, 25));
+  }
+  
   text_layer_set_background_color(x_axis_label_layer, GColorClear);
   text_layer_set_text_color(x_axis_label_layer, GColorBlack);
   text_layer_set_font(x_axis_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(x_axis_label_layer, GTextAlignmentCenter);
   
   //Set up Graph Title
-  graph_title_layer = text_layer_create(GRect(27, 5, graph_width, 20));
+  if (Round == 0){
+    graph_title_layer = text_layer_create(GRect(27, 0, graph_width, 20));
+  }else{
+    graph_title_layer = text_layer_create(GRect(27, 5, graph_width, 20));
+  }
+  
   text_layer_set_background_color(graph_title_layer, GColorClear);
   text_layer_set_text_color(graph_title_layer, GColorBlack);
   text_layer_set_font(graph_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
@@ -544,6 +601,7 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(x_axis_label_layer));
   layer_add_child(window_layer, text_layer_get_layer(graph_title_layer));
   layer_add_child(window_layer, text_layer_get_layer(error_layer));
+  layer_add_child(window_layer, s_whole_screen_layer);
   
   //Set text flow for round displays
   if (Round == 1) {
@@ -558,6 +616,7 @@ static void main_window_load(Window *window) {
 
 static void main_window_unload(Window *window) {
   layer_destroy(s_canvas_layer);
+  layer_destroy(s_whole_screen_layer);
   layer_destroy(s_tic_layer);
   text_layer_destroy(x_axis_label_layer);
   text_layer_destroy(graph_title_layer);
@@ -592,10 +651,9 @@ static void init() {
   });
   
   window_set_click_config_provider(s_main_window, click_config_provider);
-  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Free Heap: %d bytes", (int)heap_bytes_free());
   window_stack_push(s_main_window, true);
   
-  window_stack_push(s_main_window, true);
 
 
   // Register AppMessage callbacks
@@ -606,7 +664,7 @@ static void init() {
 
   // Open AppMessage
 
-  app_message_open(256, 64);
+  app_message_open(300, 64);
 }
 
 static void deinit() {
