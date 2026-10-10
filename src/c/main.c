@@ -26,7 +26,7 @@ static uint8_t s_depth_data[192];
 static uint16_t s_depth_data16[96];
 static int16_t s_num_points = 0;
 static char label_unit[10] = "";
-static char graph_title[15] = "Depth";
+static char graph_title[20] = "Depth";
 static char x_axis_label[15] = "";
 static int8_t timeSpan = 0;
 static uint8_t depth_error = 0;
@@ -69,7 +69,13 @@ static int16_t findCirlceEdge(int16_t Diameter, int32_t y, int8_t sign){
 
 static void  axis_label(){
   text_layer_set_text(x_axis_label_layer, x_axis_label);
-  snprintf(graph_title, sizeof(graph_title), "Depth %s", label_unit);
+  
+  WatchInfoModel model = watch_info_get_model();
+  if(model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20){
+    snprintf(graph_title, sizeof(graph_title), "D\ne\np\nt\nh\n %s", label_unit);
+  }else{
+    snprintf(graph_title, sizeof(graph_title), "Depth %s", label_unit);
+  }
   text_layer_set_text(graph_title_layer, graph_title);
   //use pre-defined emptystring. This function doesn't always like a direct string as input
   //i.e. "" as the second argument.
@@ -90,8 +96,6 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
   //only draw tic marks and labels if the data is recieved without error
   if (depth_error == 0){
     
-    
-  
     GColor CanvasStrokeColor = PBL_IF_COLOR_ELSE(GColorDarkGreen, GColorBlack);
     GColor CanvasBackgroundColor = PBL_IF_COLOR_ELSE(GColorCyan, GColorWhite);
     graphics_context_set_stroke_width(ctx, 1);
@@ -134,37 +138,38 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
     //printf("graph width + height: %i %i", graph_width, graph_height);
     //printf("y_scale, x_scale: %i %i", y_scale, x_scale);
     
-    
-    for (int i = 1; i < num_tics_y; i++){
-        //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
-        //determine square or round screen
-      if (Round == 0){
+    if (Round == 0){
+      for (int i = 1; i < num_tics_y; i++){
+          //y-axis. Draw lines relative to graph area. and screen. Remember this coordinate system is based on the tic_layer and not the screen.
+          //determine square or round screen
         
-        //Y-Axis
-        graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
-        uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
-        //printf("tic_value: %lu", tic_value);
-        
-        uint32_t tic_label = tic_value / 100;
-        uint32_t tic_label_rem = tic_value % 100;
-        tic_label_rem = tic_label_rem / 10;
-            
-        snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
-        graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
-        
-        //X Axis
-        for (int i = 1; i <= (num_tics_x - 1); i++){
+          
+          //Y-Axis
+          graphics_draw_line(ctx, GPoint(27, (graph_height - (y_scale * i))), GPoint((tic_width - 9), (graph_height - (y_scale * i))));
+          uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
+          //printf("tic_value: %lu", tic_value);
+          
+          uint32_t tic_label = tic_value / 100;
+          uint32_t tic_label_rem = tic_value % 100;
+          tic_label_rem = tic_label_rem / 10;
+              
+          snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
+          graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(0, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      }
+      
+      //X Axis
+      for (int i = 1; i <= (num_tics_x - 1); i++){
         graphics_draw_line(ctx, GPoint(((x_scale * i) + 27), (graph_height)), GPoint(((x_scale * i) + 27), 0));
       }
-        
-      } else {
-        
+      
+    } else {
+      //set up variables for the layer data (round display only)
+      layer_data *tic_layer_data = (layer_data *)layer_get_data(layer);
+      uint16_t canvasStartX = tic_layer_data->canvasX;
+      uint16_t canvasLen = tic_layer_data->canvasLength;
+      
+        for (int i = 1; i < num_tics_y; i++){
           //Y-Axis
-          //set up variables for the layer data (round display only)
-          layer_data *tic_layer_data = (layer_data *)layer_get_data(layer);
-          uint16_t canvasStartX = tic_layer_data->canvasX;
-          uint16_t canvasLen = tic_layer_data->canvasLength;
-        
           graphics_draw_line(ctx, GPoint((canvasStartX), (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
           uint32_t tic_value = (((depth_max * 1000) - (((depth_range * 1000) / num_tics_y) * i)) / 1000);
           //printf("tic_value: %lu", tic_value);
@@ -174,17 +179,40 @@ static void tic_update_proc(Layer *layer, GContext *ctx){
           tic_label_rem = tic_label_rem / 10;
             
           snprintf(buffer, sizeof(buffer), "%lu.%lu", tic_label, tic_label_rem);
-          graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(25, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      
+          //get model to determine if original round is being used
+          WatchInfoModel model = watch_info_get_model();  
+          //APP_LOG(APP_LOG_LEVEL_DEBUG, "Watch Model: %d", model);
         
-          //X Axis
-          for (int i = 1; i <= (num_tics_x - 1); i++){
-          graphics_draw_line(ctx, GPoint(((x_scale * i) + canvasStartX), (graph_height)), GPoint(((x_scale * i) + canvasStartX), 0));
+          if ((model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20)
+               && i == 1){
+              APP_LOG(APP_LOG_LEVEL_DEBUG, "First condition met. i =: %d", i);
+              i += 1;
+              //draw the current y-axis line so it doesn't get skipped with the label
+              graphics_draw_line(ctx, GPoint((canvasStartX), (graph_height - (y_scale * i))), GPoint((canvasStartX + canvasLen), (graph_height - (y_scale * i))));
+            }
+          if ((model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20)
+               && i == (num_tics_x - 1)){
+              APP_LOG(APP_LOG_LEVEL_DEBUG, "Second condition met. i =: %d", i);
+              break;
+            }
+          //move y axis labels to the left on original pebble round watches
+          if (model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20){
+             graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(12, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+          }else{
+            //draw labels at a point that works for other watch models
+            graphics_draw_text(ctx, buffer, fonts_get_system_font(FONT_KEY_GOTHIC_14), GRect(25, ((y_scale * i) - label_offset), 35, 10), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
           }
-        
+        }
+      
+        //X Axis
+        for (int i = 1; i <= (num_tics_x); i++){
+          graphics_draw_line(ctx, GPoint(((x_scale * i) + canvasStartX), (graph_height)), GPoint(((x_scale * i) + canvasStartX), 0));
+        }
       }
     }
   }
-}
+
 
 
 static void whole_screen_update_proc(Layer *layer, GContext *ctx){
@@ -219,6 +247,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   for (int i = 0; i < s_num_points; i++){
     if (s_depth_data16[i] < depth_min){
       depth_min = s_depth_data16[i];
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "depth_min: %d", depth_min);
     }
     if (s_depth_data16[i] > depth_max){
       depth_max = s_depth_data16[i];
@@ -236,9 +265,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
     }
     //printf("min_max: %i %i", depth_min, depth_max);
   }else{
-    //if the min data point is at least 0.5 ft., then reduce the min by 0.5ft to create a small gap below min point on graph.
+    //if the min data point is at least 0.1 ft., then reduce the min by 0.5ft to create a small gap below min point on graph.
     if (depth_min >= 50){
-      depth_min = depth_min - 50;
+       depth_min = depth_min - 50;
     }
     //if the max data point is less than 40 ft., then increase the max by 0.5 ft to create a small gap above highest point on the graph. 
     if (depth_max < (65535 - 50)){
@@ -277,6 +306,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
   if (depth_range == 0){
     depth_range = 1;
   }
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "depth_min: %d, depth_max: %d", depth_min, depth_max);
   for (int i = 0; i < (s_num_points - 1); i++){
     
     
@@ -284,7 +314,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx){
     int x2 = ((i + 1) * width) / s_num_points;
     uint32_t y1 = height - ((height * (((s_depth_data16[i] - depth_min) * 1000) / depth_range)) / 1000);
     uint32_t y2 = height - ((height * (((s_depth_data16[i + 1] - depth_min) * 1000) / depth_range)) / 1000);
-
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "x1: %d, y1: %d, x2: %d, y2: %d", x1, y1, x2, y2);
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "width: %d, num_points: %d", width, s_num_points);
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "Current data point: %d", s_depth_data16[i]);
     
     graphics_draw_line(ctx, GPoint(x1, y1), GPoint(x2, y2));
   
@@ -330,15 +362,15 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
       //uint8_t depth_timeSpan = depth_tuple_timeSpan->value->uint8;
       
       if (timeSpan == 0){
-        strcpy(x_axis_label, "One Day");
+        strcpy(x_axis_label, "1 Day");
       } else if (timeSpan == 1){
-        strcpy(x_axis_label, "Three Days");
+        strcpy(x_axis_label, "3 Days");
       } else if (timeSpan == 2){
-        strcpy(x_axis_label, "One Week");
+        strcpy(x_axis_label, "7 Days");
       } else if (timeSpan == 3){
         strcpy(x_axis_label, "30 Days");
       } else if (timeSpan == 4){
-        strcpy(x_axis_label, "One Year");
+        strcpy(x_axis_label, "365 Days");
       }
       //APP_LOG(APP_LOG_LEVEL_DEBUG, "Time Span: %i", timeSpan);
     
@@ -566,8 +598,12 @@ static void main_window_load(Window *window) {
   
   //Set up x axis text
     //Adjust the x axis label for square/round screen
+  
+  WatchInfoModel model = watch_info_get_model();
   if (Round == 0){
     x_axis_label_layer = text_layer_create(GRect(27, (height - 14), graph_width, 25));
+  }else if(model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20){
+     x_axis_label_layer = text_layer_create(GRect(27, (height - 23), graph_width, 25)); 
   }else{
     x_axis_label_layer = text_layer_create(GRect(27, (height - 30), graph_width, 25));
   }
@@ -580,13 +616,16 @@ static void main_window_load(Window *window) {
   //Set up Graph Title
   if (Round == 0){
     graph_title_layer = text_layer_create(GRect(27, 0, graph_width, 20));
-  }else{
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Squre screen!");
+  }else if (model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_14 || model == WATCH_INFO_MODEL_PEBBLE_TIME_ROUND_20){
+     graph_title_layer = text_layer_create(GRect(140, (height / 2) - 50, 35, 100)); 
+  } else{
     graph_title_layer = text_layer_create(GRect(27, 5, graph_width, 20));
   }
   
   text_layer_set_background_color(graph_title_layer, GColorClear);
   text_layer_set_text_color(graph_title_layer, GColorBlack);
-  text_layer_set_font(graph_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(graph_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD));
   text_layer_set_text_alignment(graph_title_layer, GTextAlignmentCenter);
   
   //set up error layer
